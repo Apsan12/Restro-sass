@@ -39,7 +39,7 @@ export const authMiddleware = (
       role: decoded.role,
       restaurantId: decoded.restaurantId,
     };
-
+// console.log("Authenticated user:", req.user);
     next();
   } catch (error) {
     res.status(401).json({
