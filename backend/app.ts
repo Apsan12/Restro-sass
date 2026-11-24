@@ -28,7 +28,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // HTTP request logger
 app.use(morgan("dev"));
-app.use(cookieParser());
+// app.use(cookieParser());
 
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/restaurants", restaurantRouter);

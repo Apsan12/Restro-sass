@@ -1,3 +1,4 @@
+
 import { Request, Response, NextFunction } from "express";
 import { verifyAccessToken } from "../utils/jwt.js";
 import { AccountRole } from "../models/Account.js";
@@ -22,12 +23,22 @@ export const authMiddleware = (
   next: NextFunction
 ): void => {
   try {
-    const token = req.cookies?.accessToken;
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const token = authHeader.split(" ")[1];
 
     if (!token) {
       res.status(401).json({
         success: false,
-        message: "Authentication required",
+        message: "Access token is missing",
       });
       return;
     }
@@ -39,7 +50,7 @@ export const authMiddleware = (
       role: decoded.role,
       restaurantId: decoded.restaurantId,
     };
-// console.log("Authenticated user:", req.user);
+
     next();
   } catch (error) {
     res.status(401).json({

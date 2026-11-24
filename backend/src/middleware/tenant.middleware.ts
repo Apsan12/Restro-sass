@@ -47,4 +47,4 @@ export const tenantMiddleware = (
 /// tenantMiddleware ensures that the user has the appropriate role and restaurant context to access certain routes.
 //  It checks if the user is authenticated and has a valid role (SUPER_ADMIN, BUSINESS_ADMIN, or STAFF). 
 // If the user is a BUSINESS_ADMIN or STAFF, it also verifies that they belong to a restaurant. If any of these checks fail, 
-// it responds with an appropriate error message and status code.
+// it responds with an appropriate error message and status code bujis.
