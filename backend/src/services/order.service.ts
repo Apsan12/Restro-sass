@@ -11,6 +11,7 @@ import type { IRoom } from "../models/Room.js";
 import { CreateOrderInput } from "../validator/order.validator.js";
 import { getPaginationMeta, getPaginationParams } from "../utils/pagination.js";
 import { AccountRole } from "../models/Account.js";
+import { emitOrderCreated } from "../socket/socket.events.js";
 
 
 export class OrderServiceError extends Error {
@@ -24,326 +25,336 @@ export class OrderServiceError extends Error {
 }
 
 export class OrderService {
-  async createOrder(
-    restaurantId: string,
-    staffId: string,
-    data: CreateOrderInput
-  ): Promise<HydratedDocument<IOrder>> {
-    if (!mongoose.Types.ObjectId.isValid(restaurantId)) {
-      throw new OrderServiceError("Invalid restaurant ID", 400);
+async createOrder(
+  restaurantId: string,
+  staffId: string,
+  data: CreateOrderInput
+): Promise<HydratedDocument<IOrder>> {
+  if (!mongoose.Types.ObjectId.isValid(restaurantId)) {
+    throw new OrderServiceError("Invalid restaurant ID", 400);
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(staffId)) {
+    throw new OrderServiceError("Invalid staff ID", 400);
+  }
+
+  const restaurantObjectId =
+    new mongoose.Types.ObjectId(restaurantId);
+
+  const staffObjectId =
+    new mongoose.Types.ObjectId(staffId);
+
+  let table: HydratedDocument<ITable> | null = null;
+  let room: HydratedDocument<IRoom> | null = null;
+
+  if (data.tableId) {
+    if (!mongoose.Types.ObjectId.isValid(data.tableId)) {
+      throw new OrderServiceError("Invalid table ID", 400);
     }
 
-    if (!mongoose.Types.ObjectId.isValid(staffId)) {
-      throw new OrderServiceError("Invalid staff ID", 400);
+    table = await Table.findOne({
+      _id: data.tableId,
+      restaurantId: restaurantObjectId,
+    });
+
+    if (!table) {
+      throw new OrderServiceError("Table not found", 404);
     }
 
-    const restaurantObjectId =
-      new mongoose.Types.ObjectId(restaurantId);
-
-    const staffObjectId =
-      new mongoose.Types.ObjectId(staffId);
-
-    let table: HydratedDocument<ITable> | null = null;
-    let room: HydratedDocument<IRoom> | null = null;
-
-    if (data.tableId) {
-      if (!mongoose.Types.ObjectId.isValid(data.tableId)) {
-        throw new OrderServiceError("Invalid table ID", 400);
-      }
-
-      table = await Table.findOne({
-        _id: data.tableId,
-        restaurantId: restaurantObjectId,
-      });
-
-      if (!table) {
-        throw new OrderServiceError("Table not found", 404);
-      }
-
-      if (!table.isActive) {
-        throw new OrderServiceError(
-          "This table is inactive",
-          400
-        );
-      }
-
-      if (table.status === TableStatus.MAINTENANCE) {
-        throw new OrderServiceError(
-          "This table is currently under maintenance",
-          400
-        );
-      }
-
-      if (table.status === TableStatus.OCCUPIED) {
-        throw new OrderServiceError(
-          "This table is already occupied",
-          409
-        );
-      }
-
-      if (table.status === TableStatus.RESERVED) {
-        throw new OrderServiceError(
-          "This table is currently reserved",
-          409
-        );
-      }
-    }
-
-    if (data.roomId) {
-      if (!mongoose.Types.ObjectId.isValid(data.roomId)) {
-        throw new OrderServiceError("Invalid room ID", 400);
-      }
-
-      room = await Room.findOne({
-        _id: data.roomId,
-        restaurantId: restaurantObjectId,
-      });
-
-      if (!room) {
-        throw new OrderServiceError("Room not found", 404);
-      }
-
-      if (!room.isActive) {
-        throw new OrderServiceError(
-          "This room is inactive",
-          400
-        );
-      }
-
-      if (room.status === RoomStatus.MAINTENANCE) {
-        throw new OrderServiceError(
-          "This room is currently under maintenance",
-          400
-        );
-      }
-
-      if (room.status === RoomStatus.OCCUPIED) {
-        throw new OrderServiceError(
-          "This room is already occupied",
-          409
-        );
-      }
-
-      if (room.status === RoomStatus.RESERVED) {
-        throw new OrderServiceError(
-          "This room is currently reserved",
-          409
-        );
-      }
-    }
-
-    const menuItemIds: string[] = Array.from(
-      new Set(
-        data.items.map(
-          (item: CreateOrderInput["items"][number]) => item.menuItemId
-        )
-      )
-    );
-
-    const invalidMenuItemIds = menuItemIds.filter(
-      (id) => !mongoose.Types.ObjectId.isValid(id)
-    );
-
-    if (invalidMenuItemIds.length > 0) {
+    if (!table.isActive) {
       throw new OrderServiceError(
-        "One or more menu item IDs are invalid",
+        "This table is inactive",
         400
       );
     }
 
-    const menuItems = await MenuItem.find({
-      _id: {
-        $in: menuItemIds.map((id) => new mongoose.Types.ObjectId(id)),
-      },
-      restaurantId: restaurantObjectId,
-    });
-
-    if (menuItems.length !== menuItemIds.length) {
+    if (table.status === TableStatus.MAINTENANCE) {
       throw new OrderServiceError(
-        "One or more menu items were not found",
-        404
+        "This table is currently under maintenance",
+        400
       );
     }
 
-    const menuItemMap = new Map(
-      menuItems.map((menuItem) => [
-        menuItem._id.toString(),
-        menuItem,
-      ])
+    if (table.status === TableStatus.OCCUPIED) {
+      throw new OrderServiceError(
+        "This table is already occupied",
+        409
+      );
+    }
+
+    if (table.status === TableStatus.RESERVED) {
+      throw new OrderServiceError(
+        "This table is currently reserved",
+        409
+      );
+    }
+  }
+
+  if (data.roomId) {
+    if (!mongoose.Types.ObjectId.isValid(data.roomId)) {
+      throw new OrderServiceError("Invalid room ID", 400);
+    }
+
+    room = await Room.findOne({
+      _id: data.roomId,
+      restaurantId: restaurantObjectId,
+    });
+
+    if (!room) {
+      throw new OrderServiceError("Room not found", 404);
+    }
+
+    if (!room.isActive) {
+      throw new OrderServiceError(
+        "This room is inactive",
+        400
+      );
+    }
+
+    if (room.status === RoomStatus.MAINTENANCE) {
+      throw new OrderServiceError(
+        "This room is currently under maintenance",
+        400
+      );
+    }
+
+    if (room.status === RoomStatus.OCCUPIED) {
+      throw new OrderServiceError(
+        "This room is already occupied",
+        409
+      );
+    }
+
+    if (room.status === RoomStatus.RESERVED) {
+      throw new OrderServiceError(
+        "This room is currently reserved",
+        409
+      );
+    }
+  }
+
+  const menuItemIds: string[] = Array.from(
+    new Set(
+      data.items.map(
+        (item: CreateOrderInput["items"][number]) =>
+          item.menuItemId
+      )
+    )
+  );
+
+  const invalidMenuItemIds = menuItemIds.filter(
+    (id) => !mongoose.Types.ObjectId.isValid(id)
+  );
+
+  if (invalidMenuItemIds.length > 0) {
+    throw new OrderServiceError(
+      "One or more menu item IDs are invalid",
+      400
+    );
+  }
+
+  const menuItems = await MenuItem.find({
+    _id: {
+      $in: menuItemIds.map(
+        (id) => new mongoose.Types.ObjectId(id)
+      ),
+    },
+    restaurantId: restaurantObjectId,
+  });
+
+  if (menuItems.length !== menuItemIds.length) {
+    throw new OrderServiceError(
+      "One or more menu items were not found",
+      404
+    );
+  }
+
+  const menuItemMap = new Map(
+    menuItems.map((menuItem) => [
+      menuItem._id.toString(),
+      menuItem,
+    ])
+  );
+
+  const orderItems: IOrderItem[] = data.items.map(
+    (item: CreateOrderInput["items"][number]) => {
+      const menuItem = menuItemMap.get(item.menuItemId);
+
+      if (!menuItem) {
+        throw new OrderServiceError(
+          `Menu item ${item.menuItemId} was not found`,
+          404
+        );
+      }
+
+      if (!menuItem.isAvailable) {
+        throw new OrderServiceError(
+          `${menuItem.name} is currently unavailable`,
+          400
+        );
+      }
+
+      const totalPrice =
+        menuItem.price * item.quantity;
+
+      return {
+        menuItemId: menuItem._id,
+        name: menuItem.name,
+        quantity: item.quantity,
+        unitPrice: menuItem.price,
+        totalPrice,
+      };
+    }
+  );
+
+  const subtotal = orderItems.reduce<number>(
+    (sum, item) => sum + item.totalPrice,
+    0
+  );
+
+  const totalAmount = subtotal;
+
+  const token = await this.generateOrderToken(
+    restaurantId
+  );
+
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    if (table) {
+      const currentTable = await Table.findOne({
+        _id: table._id,
+        restaurantId: restaurantObjectId,
+        status: TableStatus.AVAILABLE,
+        isActive: true,
+      }).session(session);
+
+      if (!currentTable) {
+        throw new OrderServiceError(
+          "This table is no longer available",
+          409
+        );
+      }
+    }
+
+    if (room) {
+      const currentRoom = await Room.findOne({
+        _id: room._id,
+        restaurantId: restaurantObjectId,
+        status: RoomStatus.AVAILABLE,
+        isActive: true,
+      }).session(session);
+
+      if (!currentRoom) {
+        throw new OrderServiceError(
+          "This room is no longer available",
+          409
+        );
+      }
+    }
+
+    const [order] = await Order.create(
+      [
+        {
+          restaurantId: restaurantObjectId,
+          staffId: staffObjectId,
+
+          tableId: table?._id,
+          roomId: room?._id,
+
+          token,
+
+          items: orderItems,
+
+          subtotal,
+          totalAmount,
+
+          status: OrderStatus.PENDING,
+        },
+      ],
+      { session }
     );
 
-    const orderItems: IOrderItem[] = data.items.map(
-      (item: CreateOrderInput["items"][number]) => {
-        const menuItem = menuItemMap.get(item.menuItemId);
-
-        if (!menuItem) {
-          throw new OrderServiceError(
-            `Menu item ${item.menuItemId} was not found`,
-            404
-          );
-        }
-
-        if (!menuItem.isAvailable) {
-          throw new OrderServiceError(
-            `${menuItem.name} is currently unavailable`,
-            400
-          );
-        }
-
-        const totalPrice = menuItem.price * item.quantity;
-
-        return {
-          menuItemId: menuItem._id,
-          name: menuItem.name,
-          quantity: item.quantity,
-          unitPrice: menuItem.price,
-          totalPrice,
-        };
-      }
-    );
-
-    const subtotal = orderItems.reduce<number>(
-      (sum, item) => sum + item.totalPrice,
-      0
-    );
-
-    const totalAmount = subtotal;
-
-    const token = await this.generateOrderToken(restaurantId);
-
-    const session = await mongoose.startSession();
-
-    try {
-      session.startTransaction();
-
-      if (table) {
-        const currentTable =
-          await Table.findOne({
-            _id: table._id,
-            restaurantId: restaurantObjectId,
-            status: TableStatus.AVAILABLE,
-            isActive: true,
-          }).session(session);
-
-        if (!currentTable) {
-          throw new OrderServiceError(
-            "This table is no longer available",
-            409
-          );
-        }
-      }
-
-      if (room) {
-        const currentRoom =
-          await Room.findOne({
-            _id: room._id,
-            restaurantId: restaurantObjectId,
-            status: RoomStatus.AVAILABLE,
-            isActive: true,
-          }).session(session);
-
-        if (!currentRoom) {
-          throw new OrderServiceError(
-            "This room is no longer available",
-            409
-          );
-        }
-      }
-
-      const [order] = await Order.create(
-        [
-          {
-            restaurantId: restaurantObjectId,
-            staffId: staffObjectId,
-
-            tableId: table?._id,
-            roomId: room?._id,
-
-            token,
-
-            items: orderItems,
-
-            subtotal,
-            totalAmount,
-
-            status: OrderStatus.PENDING,
+    if (table) {
+      const tableUpdate = await Table.updateOne(
+        {
+          _id: table._id,
+          restaurantId: restaurantObjectId,
+          status: TableStatus.AVAILABLE,
+        },
+        {
+          $set: {
+            status: TableStatus.OCCUPIED,
           },
-        ],
+        },
         {
           session,
         }
       );
 
-      if (table) {
-        const tableUpdate =
-          await Table.updateOne(
-            {
-              _id: table._id,
-              restaurantId: restaurantObjectId,
-              status: TableStatus.AVAILABLE,
-            },
-            {
-              $set: {
-                status: TableStatus.OCCUPIED,
-              },
-            },
-            {
-              session,
-            }
-          );
-
-        if (tableUpdate.modifiedCount !== 1) {
-          throw new OrderServiceError(
-            "Failed to occupy the table",
-            409
-          );
-        }
+      if (tableUpdate.modifiedCount !== 1) {
+        throw new OrderServiceError(
+          "Failed to occupy the table",
+          409
+        );
       }
-
-      if (room) {
-        const roomUpdate =
-          await Room.updateOne(
-            {
-              _id: room._id,
-              restaurantId: restaurantObjectId,
-              status: RoomStatus.AVAILABLE,
-            },
-            {
-              $set: {
-                status: RoomStatus.OCCUPIED,
-              },
-            },
-            {
-              session,
-            }
-          );
-
-        if (roomUpdate.modifiedCount !== 1) {
-          throw new OrderServiceError(
-            "Failed to occupy the room",
-            409
-          );
-        }
-      }
-
-      await session.commitTransaction();
-
-      return order;
-    } catch (error) {
-      await session.abortTransaction();
-
-      if (error instanceof OrderServiceError) {
-        throw error;
-      }
-
-      throw new OrderServiceError(
-        "Failed to create order",
-        500
-      );
-    } finally {
-      await session.endSession();
     }
+
+    if (room) {
+      const roomUpdate = await Room.updateOne(
+        {
+          _id: room._id,
+          restaurantId: restaurantObjectId,
+          status: RoomStatus.AVAILABLE,
+        },
+        {
+          $set: {
+            status: RoomStatus.OCCUPIED,
+          },
+        },
+        {
+          session,
+        }
+      );
+
+      if (roomUpdate.modifiedCount !== 1) {
+        throw new OrderServiceError(
+          "Failed to occupy the room",
+          409
+        );
+      }
+    }
+
+    // Commit the transaction first.
+    await session.commitTransaction();
+
+    // Only notify connected restaurant users
+    // after the order has been successfully committed.
+    emitOrderCreated(
+      restaurantObjectId.toString(),
+      order
+    );
+
+    return order;
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    if (error instanceof OrderServiceError) {
+      throw error;
+    }
+
+    throw new OrderServiceError(
+      "Failed to create order",
+      500
+    );
+  } finally {
+    await session.endSession();
   }
+}
 
   private async generateOrderToken(
     restaurantId: string

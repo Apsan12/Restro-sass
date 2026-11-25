@@ -1,11 +1,17 @@
 import { Router } from "express";
 
-import { login, logout } from "../controller/auth.controller.js";
+import {
+  login,
+  logout,
+  refreshAccessToken,
+} from "../controller/auth.controller.js";
+
 import { authMiddleware } from "../middleware/auth.middleware.js";
 
 const authRouter = Router();
 
 authRouter.post("/login", login);
+authRouter.post("/refresh", refreshAccessToken);
 authRouter.post("/logout", logout);
 
 authRouter.get("/me", authMiddleware, (req, res) => {
