@@ -1,7 +1,10 @@
 import bcrypt from "bcryptjs";
 
 import { Account, AccountRole } from "../models/Account.js";
-import { CreateStaffInput, UpdateStaffInput  } from "../validator/staff.validator.js";
+import {
+  CreateStaffInput,
+  UpdateStaffInput,
+} from "../validator/staff.validator.js";
 
 export class StaffServiceError extends Error {
   public readonly statusCode: number;
@@ -22,12 +25,17 @@ export interface CreatedStaff {
   isActive: boolean;
 }
 
+const MANAGED_STAFF_ROLES = [
+  AccountRole.STAFF,
+  AccountRole.KITCHEN_STAFF,
+];
+
 export class StaffService {
   async createStaff(
     data: CreateStaffInput,
     restaurantId: string
   ): Promise<CreatedStaff> {
-    // 1. Make sure the authenticated admin belongs to a restaurant
+    // 1. Make sure restaurant context exists
     if (!restaurantId) {
       throw new StaffServiceError(
         "Restaurant context is required",
@@ -56,7 +64,7 @@ export class StaffService {
       name: data.name,
       email: data.email,
       password: hashedPassword,
-      role: AccountRole.STAFF,
+      role: data.role,
       isActive: true,
     });
 
@@ -69,9 +77,11 @@ export class StaffService {
       restaurantId: staff.restaurantId!.toString(),
       isActive: staff.isActive,
     };
-
   }
-    async getAllStaff(restaurantId: string): Promise<CreatedStaff[]> {
+
+  async getAllStaff(
+    restaurantId: string
+  ): Promise<CreatedStaff[]> {
     if (!restaurantId) {
       throw new StaffServiceError(
         "Restaurant context is required",
@@ -81,7 +91,9 @@ export class StaffService {
 
     const staff = await Account.find({
       restaurantId,
-      role: AccountRole.STAFF,
+      role: {
+        $in: MANAGED_STAFF_ROLES,
+      },
     }).sort({ createdAt: -1 });
 
     return staff.map((account) => ({
@@ -95,123 +107,141 @@ export class StaffService {
   }
 
   async getStaffById(
-  staffId: string,
-  restaurantId: string
-): Promise<CreatedStaff> {
-  if (!restaurantId) {
-    throw new StaffServiceError(
-      "Restaurant context is required",
-      400
-    );
-  }
-
-  const staff = await Account.findOne({
-    _id: staffId,
-    restaurantId,
-    role: AccountRole.STAFF,
-  });
-
-  if (!staff) {
-    throw new StaffServiceError(
-      "Staff not found",
-      404
-    );
-  }
-
-  return {
-    id: staff._id.toString(),
-    name: staff.name,
-    email: staff.email,
-    role: staff.role,
-    restaurantId: staff.restaurantId!.toString(),
-    isActive: staff.isActive,
-  };
-}
-async updateStaff(
-  staffId: string,
-  restaurantId: string,
-  data: UpdateStaffInput
-): Promise<CreatedStaff> {
-  if (!restaurantId) {
-    throw new StaffServiceError(
-      "Restaurant context is required",
-      400
-    );
-  }
-
-  const staff = await Account.findOne({
-    _id: staffId,
-    restaurantId,
-    role: AccountRole.STAFF,
-  });
-
-  if (!staff) {
-    throw new StaffServiceError(
-      "Staff not found",
-      404
-    );
-  }
-
-  if (data.email && data.email !== staff.email) {
-    const existingAccount = await Account.findOne({
-      email: data.email,
-      _id: { $ne: staffId },
-    });
-
-    if (existingAccount) {
+    staffId: string,
+    restaurantId: string
+  ): Promise<CreatedStaff> {
+    if (!restaurantId) {
       throw new StaffServiceError(
-        "An account with this email already exists",
-        409
+        "Restaurant context is required",
+        400
       );
     }
+
+    const staff = await Account.findOne({
+      _id: staffId,
+      restaurantId,
+      role: {
+        $in: MANAGED_STAFF_ROLES,// the staff roles that can be managed by the restaurant admin or manager
+      },
+    });
+
+    if (!staff) {
+      throw new StaffServiceError(
+        "Staff not found",
+        404
+      );
+    }
+
+    return {
+      id: staff._id.toString(),
+      name: staff.name,
+      email: staff.email,
+      role: staff.role,
+      restaurantId: staff.restaurantId!.toString(),
+      isActive: staff.isActive,
+    };
   }
 
-  if (data.name !== undefined) {
-    staff.name = data.name;
+  async updateStaff(
+    staffId: string,
+    restaurantId: string,
+    data: UpdateStaffInput
+  ): Promise<CreatedStaff> {
+    if (!restaurantId) {
+      throw new StaffServiceError(
+        "Restaurant context is required",
+        400
+      );
+    }
+
+    const staff = await Account.findOne({
+      _id: staffId,
+      restaurantId,
+      role: {
+        $in: MANAGED_STAFF_ROLES,
+      },
+    });
+
+    if (!staff) {
+      throw new StaffServiceError(
+        "Staff not found",
+        404
+      );
+    }
+
+    // Check duplicate email
+    if (
+      data.email &&
+      data.email !== staff.email
+    ) {
+      const existingAccount = await Account.findOne({
+        email: data.email,
+        _id: { $ne: staffId },
+      });
+
+      if (existingAccount) {
+        throw new StaffServiceError(
+          "An account with this email already exists",
+          409
+        );
+      }
+    }
+
+    // Update name
+    if (data.name !== undefined) {
+      staff.name = data.name;
+    }
+
+    // Update email
+    if (data.email !== undefined) {
+      staff.email = data.email;
+    }
+
+    // Update role
+    if (data.role !== undefined) {
+      staff.role = data.role;
+    }
+
+    await staff.save();
+
+    return {
+      id: staff._id.toString(),
+      name: staff.name,
+      email: staff.email,
+      role: staff.role,
+      restaurantId: staff.restaurantId!.toString(),
+      isActive: staff.isActive,
+    };
   }
 
-  if (data.email !== undefined) {
-    staff.email = data.email;
+  async deleteStaff(
+    staffId: string,
+    restaurantId: string
+  ): Promise<void> {
+    if (!restaurantId) {
+      throw new StaffServiceError(
+        "Restaurant context is required",
+        400
+      );
+    }
+
+    const staff = await Account.findOne({
+      _id: staffId,
+      restaurantId,
+      role: {
+        $in: MANAGED_STAFF_ROLES,
+      },
+    });
+
+    if (!staff) {
+      throw new StaffServiceError(
+        "Staff not found",
+        404
+      );
+    }
+
+    await staff.deleteOne();
   }
-
-  await staff.save();
-
-  return {
-    id: staff._id.toString(),
-    name: staff.name,
-    email: staff.email,
-    role: staff.role,
-    restaurantId: staff.restaurantId!.toString(),
-    isActive: staff.isActive,
-  };
 }
-async deleteStaff(
-  staffId: string,
-  restaurantId: string
-): Promise<void> {
-  if (!restaurantId) {
-    throw new StaffServiceError(
-      "Restaurant context is required",
-      400
-    );
-  }
 
-  const staff = await Account.findOne({
-    _id: staffId,
-    restaurantId,
-    role: AccountRole.STAFF,
-  });
-
-  if (!staff) {
-    throw new StaffServiceError(
-      "Staff not found",
-      404
-    );
-  }
-
-  await staff.deleteOne();
-}
-
-}
-
-export const staffService = new StaffService(); 
+export const staffService = new StaffService();

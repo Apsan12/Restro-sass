@@ -16,7 +16,7 @@ import { AccountRole } from "../models/Account.js";
 const tableRouter = Router();
 
 // Create table
-// BUSINESS_ADMIN only
+// BUSINESS_ADMIN only kasto muji raixa erorr 
 tableRouter.post(
   "/",
   authMiddleware,

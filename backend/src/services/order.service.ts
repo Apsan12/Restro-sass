@@ -11,7 +11,11 @@ import type { IRoom } from "../models/Room.js";
 import { CreateOrderInput } from "../validator/order.validator.js";
 import { getPaginationMeta, getPaginationParams } from "../utils/pagination.js";
 import { AccountRole } from "../models/Account.js";
-import { emitOrderCreated } from "../socket/socket.events.js";
+import {
+  emitOrderCreated,
+  emitOrderStatusUpdated,
+  emitOrderCancelled,
+} from "../socket/socket.events.js";
 
 
 export class OrderServiceError extends Error {
@@ -540,10 +544,14 @@ async createOrder(
           );
         }
       }
+await session.commitTransaction();
 
-      await session.commitTransaction();
+emitOrderCancelled(
+  restaurantObjectId.toString(),
+  order
+);
 
-      return order;
+return order;
     } catch (error) {
       await session.abortTransaction();
 
@@ -695,9 +703,14 @@ await order.save({ session });
         }
       }
 
-      await session.commitTransaction();
+    await session.commitTransaction();
 
-      return order;
+emitOrderStatusUpdated(
+  restaurantObjectId.toString(),
+  order
+);
+
+return order;
     } catch (error) {
       await session.abortTransaction();
 

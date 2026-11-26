@@ -21,7 +21,7 @@ initializeSocket(httpServer);
 
 httpServer.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Socket.IO server initialized`);
+  // console.log(`Socket.IO server initialized`); tested shit ho yo
 });
   } catch (error) {
     console.error("Failed to start server:", error);

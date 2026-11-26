@@ -4,6 +4,7 @@ import {
   socketAuthMiddleware,
   AuthenticatedSocket,
 } from "./socket.middleware.js";
+import { AccountRole } from "../models/Account.js";
 
 let io: Server;
 
@@ -15,6 +16,7 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
     },
   });
 
+  // Socket authentication
   io.use(socketAuthMiddleware);
 
   io.on("connection", (socket) => {
@@ -30,6 +32,12 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
       `Socket connected: ${socket.id} | User: ${user.userId} | Role: ${user.role}`
     );
 
+    /*
+     
+     * Every restaurant user joins:/ even the admin, staff, and kitchen staff join this room bhaneko matlab 
+    each and every user of a restaurant will join this room so that when an order is created or updated, all users of that restaurant will receive the notification.
+     * restaurant:{restaurantId}
+     */
     if (user.restaurantId) {
       const restaurantRoom = `restaurant:${user.restaurantId}`;
 
@@ -38,6 +46,23 @@ export const initializeSocket = (httpServer: HttpServer): Server => {
       console.log(
         `Socket ${socket.id} joined ${restaurantRoom}`
       );
+
+      /*
+       * Kitchen-specific room it means only the kitchen staff of a restaurant will join this room so that when an order is created or updated, only the kitchen staff will receive the notification.
+       *
+       * Only KITCHEN_STAFF joins:
+       * restaurant:{restaurantId}:kitchen
+       */
+      if (user.role === AccountRole.KITCHEN_STAFF) {
+        const kitchenRoom =
+          `restaurant:${user.restaurantId}:kitchen`;
+
+        socket.join(kitchenRoom);
+
+        console.log(
+          `Socket ${socket.id} joined ${kitchenRoom}`
+        );
+      }
     }
 
     socket.on("disconnect", () => {

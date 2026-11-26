@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AccountRole } from "../models/Account.js";
 
 export const createStaffSchema = z.object({
   name: z
@@ -17,6 +18,11 @@ export const createStaffSchema = z.object({
     .string()
     .min(6, "Password must be at least 6 characters")
     .max(100, "Password cannot exceed 100 characters"),
+
+  role: z.enum([
+    AccountRole.STAFF,
+    AccountRole.KITCHEN_STAFF,
+  ]),
 });
 
 export type CreateStaffInput = z.infer<typeof createStaffSchema>;
@@ -35,7 +41,13 @@ export const updateStaffSchema = z.object({
     .toLowerCase()
     .email("Invalid email address")
     .optional(),
+
+  role: z
+    .enum([
+      AccountRole.STAFF,
+      AccountRole.KITCHEN_STAFF,
+    ])
+    .optional(),
 });
 
 export type UpdateStaffInput = z.infer<typeof updateStaffSchema>;
-
