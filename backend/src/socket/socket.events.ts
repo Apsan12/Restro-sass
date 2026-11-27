@@ -6,7 +6,7 @@ export const emitOrderCreated = (
 ): void => {
   const io = getIO();
 
-  // General restaurant room
+  // General restaurant room this means all the users of a restaurant will receive the notification when an order is created or updated.
   io.to(`restaurant:${restaurantId}`).emit(
     "order:created",
     order

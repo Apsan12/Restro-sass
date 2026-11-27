@@ -35,9 +35,9 @@ export interface LoginResponseData {
 
 export class AuthService {
   async login(data: LoginInput): Promise<LoginResponseData> {
-    const account = await Account.findOne({ email: data.email }).select(
-      "+password"
-    );
+    const account = await Account.findOne({
+      email: data.email.trim().toLowerCase(),
+    }).select("+password");
 
     if (!account) {
       throw new AuthServiceError("Invalid email or password", 401);
