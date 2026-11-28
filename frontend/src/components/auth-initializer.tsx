@@ -7,14 +7,19 @@ import { useAuthStore } from "@/stores/auth.store";
 
 export default function AuthInitializer() {
   const setUser = useAuthStore((state) => state.setUser);
+  const setInitialized = useAuthStore(
+    (state) => state.setInitialized
+  );
 
   useEffect(() => {
     const session = getAuthSession();
 
-    if (session?.user) {
+    if (session?.user && session.accessToken) {
       setUser(session.user);
     }
-  }, [setUser]);
+
+    setInitialized();
+  }, [setUser, setInitialized]);
 
   return null;
 }

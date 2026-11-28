@@ -19,20 +19,39 @@ export default function ProtectedRoute({
     (state) => state.isAuthenticated
   );
 
+  const isInitialized = useAuthStore(
+    (state) => state.isInitialized
+  );
+
   useEffect(() => {
+    if (!isInitialized) {
+      return;
+    }
+
     if (!isAuthenticated) {
       router.replace(
-        `/login?redirect=${encodeURIComponent(pathname)}`
+        `/login?redirect=${encodeURIComponent(pathname)}`// Redirect to login with the current path as a query parameter
       );
     }
-  }, [isAuthenticated, pathname, router]);
+  }, [
+    isInitialized,
+    isAuthenticated,
+    pathname,
+    router,
+  ]);
 
-  if (!isAuthenticated) {
+  if (!isInitialized) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-gray-500">Checking authentication...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#f8f6f2]">
+        <p className="text-sm text-stone-500">
+          Loading Manage Resto...
+        </p>
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return null;
   }
 
   return <>{children}</>;

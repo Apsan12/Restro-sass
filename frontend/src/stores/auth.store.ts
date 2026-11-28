@@ -1,17 +1,21 @@
 import { create } from "zustand";
+
 import type { AuthUser } from "@/types/auth";
 
 interface AuthState {
   user: AuthUser | null;
   isAuthenticated: boolean;
+  isInitialized: boolean;
 
   setUser: (user: AuthUser) => void;
   clearAuth: () => void;
+  setInitialized: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({ // it is creating a store using zustand library in the simple word this is creating a store for authentication state management using zustand library
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
+  isInitialized: false,
 
   setUser: (user) =>
     set({
@@ -23,5 +27,10 @@ export const useAuthStore = create<AuthState>((set) => ({ // it is creating a st
     set({
       user: null,
       isAuthenticated: false,
+    }),
+
+  setInitialized: () =>
+    set({
+      isInitialized: true,
     }),
 }));
